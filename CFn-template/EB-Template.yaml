@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ASO-Chiebukuro Elastic BEanstalk Template.
+
+Parameters: 
+  AppName:
+    Description: Application Name
+    Type: String
+  VPCId:
+    Description: vpc id
+    Type: String
+  Subnet1:
+    Description: Deploy subnet1 id
+    Type: String
+  Subnet2:
+    Description: Deploy subnet2 id
+    Type: String
+  Platform:
+    Description: Use Platform
+    Type: String
+    AllowedValues:
+      - "64bit Amazon Linux 2 v3.1.1 running Python 3.7"
+      - "64bit Amazon Linux 2 v3.1.2 running PHP 7.4"
+      - "64bit Amazon Linux 2 v3.1.2 running PHP 7.3"
+      - "64bit Amazon Linux 2 v3.1.2 running PHP 7.2"
+
+Resources: 
+  ElasticBeanstalkApp:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: !Ref AppName
+  ElasticBeanstalkEnv:
+    Type: AWS::ElasticBeanstalk::Environment
+    DependsOn: ElasticBeanstalkApp
+    Properties:
+      ApplicationName: !Ref AppName
+      Description: !Join ["_",[!Ref AppName,Environment]]
+      EnvironmentName: !Join ["-",[!Ref AppName,Env]]
+      SolutionStackName: !Ref Platform
+      OptionSettings:
+          - Namespace: aws:autoscaling:asg
+            OptionName: MinSize
+            Value: '1'
+          - Namespace: aws:autoscaling:asg
+            OptionName: MaxSize
+            Value: '1'
+          - Namespace: aws:elasticbeanstalk:environment
+            OptionName: LoadBalancerType
+            Value: application
+          - Namespace: aws:ec2:vpc
+            OptionName: VPCId
+            Value: !Ref VPCId
+          - Namespace : aws:ec2:vpc
+            OptionName: Subnets
+            Value: !Join [",", [!Ref  Subnet1 , !Ref Subnet2]]
+          - Namespace: aws:elasticbeanstalk:environment
+            OptionName: ServiceRole
+            Value: aws-elasticbeanstalk-service-role
+          - Namespace: aws:autoscaling:launchconfiguration
+            OptionName: IamInstanceProfile
+            Value: aws-elasticbeanstalk-ec2-role
+
+Outputs:  
+  AppName:
+    Description: Elastic Benastalk Aplication Name
+    Value: !Ref AppName
+    Export: 
+      Name: EBAppname
+  EnvName:
+    Description: Elastic Beanstalk Environment Name
+    Value: !Join ["-",[!Ref AppName,Env]]
+    Export: 
+      Name: EBEnvironment

@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ASO-Choebukuro local DNS Template.
+
+Parameters: 
+  LocalDomain:
+    Description: local domain name.(xxx.local)
+    Type: String
+  CWAName:
+    Description: Cloud Watche Alarm Name.
+    Type: String
+    Default: Failover_Status_Check
+  PrimaryInstanceId:
+    Description: Primary instance ID
+    Type: String
+  PrimaryInstanceIp:
+    Description: Primary instance IP
+    Type: String
+  SecondaryInstanceId:
+    Description: Secondary instance ID
+    Type: String
+  SecondaryInstanceIp:
+    Description: Secondary instance IP
+    Type: String
+  VPCId:
+    Description: VPC ID
+    Type: String
+
+Resources: 
+# Cloud Watche Settings
+  MainDBAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      MetricName: StatuCheckFailed
+      Namespace: AWS/EC2
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 1
+      Period: 300
+      Statistic: Maximum
+      Threshold: 1
+      ActionsEnabled: True
+      AlarmDescription: MainDB Helth Check.
+      AlarmName: !Join ["_" , [!Ref CWAName , PrimaryInstance ]]
+      Dimensions: 
+        - Name: InstanceId
+          Value: !Ref PrimaryInstanceId
+  SecondaryDBAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      MetricName: StatuCheckFailed
+      Namespace: AWS/EC2
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 1
+      Period: 300
+      Statistic: Maximum
+      Threshold: 1
+      ActionsEnabled: True
+      AlarmDescription: SecondaryDB Helth Check.
+      AlarmName: !Join ["_" , [!Ref CWAName , SecondaryInstance ]]
+      Dimensions: 
+        - Name: InstanceId
+          Value: !Ref SecondaryInstanceId
+
+# local Domain Settings
+  route53HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref LocalDomain
+      HostedZoneConfig:
+        Comment: ASO-Chiebukuro VPC private hostedzone.
+      VPCs:
+        - VPCId: !Ref VPCId
+          VPCRegion: !Sub ${AWS::Region}
+  MainDBHelthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        AlarmIdentifier:
+          Name: !Join ["_" , [!Ref CWAName , PrimaryInstance ]]
+          Region: !Sub ${AWS::Region}
+        Type: CLOUDWATCH_METRIC
+        InsufficientDataHealthStatus: Unhealthy
+  SecondaryDBHelthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        AlarmIdentifier:
+          Name: !Join ["_" , [!Ref CWAName , SecondaryInstance ]]
+          Region: !Sub ${AWS::Region}
+        Type: CLOUDWATCH_METRIC
+        InsufficientDataHealthStatus: Unhealthy
+  DBRecordPrimary:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      Name: !Join ["." , [ db ,!Ref LocalDomain]]
+      Type: A
+      TTL: 60
+      Failover: PRIMARY
+      HealthCheckId: !Ref MainDBHelthCheck
+      HostedZoneId: !Ref route53HostedZone
+      ResourceRecords: 
+      - !Ref PrimaryInstanceIp
+      SetIdentifier: maindb
+  DBRecordSecondary:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      Name: !Join ["." , [ db ,!Ref LocalDomain]]
+      Type: A
+      TTL: 60
+      Failover: SECONDARY
+      HealthCheckId: !Ref SecondaryDBHelthCheck
+      HostedZoneId: !Ref route53HostedZone
+      ResourceRecords: 
+      - !Ref SecondaryInstanceIp
+      SetIdentifier: secondarydb
